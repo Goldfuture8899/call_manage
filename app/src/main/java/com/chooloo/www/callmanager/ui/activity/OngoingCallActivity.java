@@ -89,10 +89,6 @@ public class OngoingCallActivity extends AbsThemeActivity implements DialpadFrag
     private static final String CHANNEL_ID = "notification";
     private static final int NOTIFICATION_ID = 42069;
     // Handler variables
-    private static final int TIME_START = 1;
-    private static final int TIME_STOP = 0;
-    private static final int TIME_UPDATE = 2;
-    private static final int REFRESH_RATE = 100;
 
     // Call State
     private static int mState;
@@ -349,23 +345,6 @@ public class OngoingCallActivity extends AbsThemeActivity implements DialpadFrag
 //                .putExtra("commandType", RECORD_SERVICE_STOP));
     }
 
-    /**
-     * To disable back button
-     */
-    @Override
-    public void onBackPressed() {
-        // In case the dialpad is opened, pressing the back button will close it
-        if (mBottomSheetBehavior.getState() == BottomSheetBehavior.STATE_EXPANDED)
-            mBottomSheetBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == PermissionUtils.PERMISSION_RC && PermissionUtils.checkPermissionsGranted(grantResults))
-            setSmsOverlay(mFloatingSendSMSButton);
-    }
-
     @Override
     protected void onStart() {
         super.onStart();
@@ -374,10 +353,6 @@ public class OngoingCallActivity extends AbsThemeActivity implements DialpadFrag
 //                .putExtra("commandType", RECORD_SERVICE_START));
     }
 
-    @Override
-    public void onKeyPressed(int keyCode, KeyEvent event) {
-        CallManager.keypad((char) event.getUnicodeChar());
-    }
     // -- On Clicks -- //
 
     //TODO silence the ringing
@@ -399,52 +374,6 @@ public class OngoingCallActivity extends AbsThemeActivity implements DialpadFrag
         int seconds = Integer.parseInt(PreferenceUtils.getInstance().getString(R.string.pref_answer_call_timer_key));
         mActionTimer.setData(seconds * 1000, false);
         mActionTimer.start();
-    }
-
-    /**
-     * Turns on mute according to current state (if already on/off)
-     *
-     * @param view the clicked view
-     */
-    @OnClick(R.id.button_mute)
-    public void toggleMute(View view) {
-        Utilities.toggleViewActivation(view);
-        if (view.isActivated()) mMuteButton.setImageResource(R.drawable.ic_mic_off_black_24dp);
-        else mMuteButton.setImageResource(R.drawable.ic_mic_black_24dp);
-        mAudioManager.setMicrophoneMute(view.isActivated());
-    }
-
-    /**
-     * Turns on/off the speaker according to current state (if already on/off)
-     *
-     * @param view the clicked view
-     */
-    @OnClick(R.id.button_speaker)
-    public void toggleSpeaker(View view) {
-        Utilities.toggleViewActivation(view);
-        mAudioManager.setSpeakerphoneOn(view.isActivated());
-    }
-
-    /**
-     * Puts the call on hold
-     *
-     * @param view the clicked view
-     */
-    @OnClick(R.id.button_hold)
-    public void toggleHold(View view) {
-        Utilities.toggleViewActivation(view);
-        CallManager.hold(view.isActivated());
-    }
-
-    //TODO add functionality to the Keypad button
-    @OnClick(R.id.button_keypad)
-    public void toggleKeypad(View view) {
-        mBottomSheetBehavior.setState(BottomSheetBehavior.STATE_EXPANDED);
-    }
-
-    //TODO add functionality to the Add call button
-    @OnClick(R.id.button_add_call)
-    public void addCall(View view) {
     }
 
     /**
@@ -498,47 +427,6 @@ public class OngoingCallActivity extends AbsThemeActivity implements DialpadFrag
         removeOverlay();
     }
 
-    /**
-     * Changes the color of the icon according to button status (activated or not)
-     *
-     * @param view the clicked view
-     */
-    @OnClick({R.id.button_speaker, R.id.button_hold, R.id.button_mute})
-    public void changeColors(View view) {
-        ImageView imageButton = (ImageView) view;
-        if (view.isActivated()) {
-            imageButton.setColorFilter(ContextCompat.getColor(this, R.color.white));
-        } else {
-            imageButton.setColorFilter(ContextCompat.getColor(this, R.color.soft_black));
-        }
-    }
-
-    // -- Call Actions -- //
-
-    /**
-     * /*
-     * Answers incoming call and changes the ui accordingly
-     */
-    private void activateCall() {
-        CallManager.answer();
-        switchToCallingUI();
-    }
-
-    /**
-     * End current call / Incoming call and changes the ui accordingly
-     */
-    private void endCall() {
-        mCallTimeHandler.sendEmptyMessage(TIME_STOP);
-        CallManager.reject();
-        releaseWakeLock();
-        if (CallManager.isAutoCalling()) {
-            finish();
-            CallManager.nextCall(this);
-        } else {
-            (new Handler()).postDelayed(this::finish, END_CALL_MILLIS); // Delay the closing of the call
-        }
-    }
-
     // -- UI -- //
 
     /**
@@ -569,38 +457,7 @@ public class OngoingCallActivity extends AbsThemeActivity implements DialpadFrag
      *
      * @param state the current call state
      */
-    private void updateUI(int state) {
-        @StringRes int statusTextRes;
-        switch (state) {
-            case Call.STATE_ACTIVE: // Ongoing
-                statusTextRes = R.string.status_call_active;
-                break;
-            case Call.STATE_DISCONNECTED: // Ended
-                statusTextRes = R.string.status_call_disconnected;
-                break;
-            case Call.STATE_RINGING: // Incoming
-                statusTextRes = R.string.status_call_incoming;
-                showBiometricPrompt(this);
-                break;
-            case Call.STATE_DIALING: // Outgoing
-                statusTextRes = R.string.status_call_dialing;
-                break;
-            case Call.STATE_CONNECTING: // Connecting (probably outgoing)
-                statusTextRes = R.string.status_call_dialing;
-                break;
-            case Call.STATE_HOLDING: // On Hold
-                statusTextRes = R.string.status_call_holding;
-                break;
-            default:
-                statusTextRes = R.string.status_call_active;
-                break;
-        }
-        mStatusText.setText(statusTextRes);
-        if (state != Call.STATE_RINGING && state != Call.STATE_DISCONNECTED) switchToCallingUI();
-        if (state == Call.STATE_DISCONNECTED) endCall();
-        mState = state;
-        mStateText = getResources().getString(statusTextRes);
-
+    private void onStateChanged(int state) {
         if (mNotificationEnabled) {
             try {
                 mBuilder.setContentText(mStateText);
@@ -999,28 +856,4 @@ public class OngoingCallActivity extends AbsThemeActivity implements DialpadFrag
         }
     }
 
-    @SuppressLint("HandlerLeak")
-    class CallTimeHandler extends Handler {
-        @Override
-        public void handleMessage(@NotNull Message msg) {
-            super.handleMessage(msg);
-            switch (msg.what) {
-                case TIME_START:
-                    mCallTimer.start(); // Starts the timer
-                    mCallTimeHandler.sendEmptyMessage(TIME_UPDATE); // Starts the time ui updates
-                    break;
-                case TIME_STOP:
-                    mCallTimeHandler.removeMessages(TIME_UPDATE); // No more updates
-                    mCallTimer.stop(); // Stops the timer
-                    updateTimeUI(); // Updates the time ui
-                    break;
-                case TIME_UPDATE:
-                    updateTimeUI(); // Updates the time ui
-                    mCallTimeHandler.sendEmptyMessageDelayed(TIME_UPDATE, REFRESH_RATE); // Text view updates every milisecond (REFRESH RATE)
-                    break;
-                default:
-                    break;
-            }
-        }
-    }
 }
